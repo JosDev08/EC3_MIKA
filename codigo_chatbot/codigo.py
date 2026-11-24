@@ -144,6 +144,99 @@ resultado = (
 
 ### PUEDE AMPLIARSE 
 
+# ==============================================================================
+# ADICIONES EC3 (SOLO PANDAS Y PYTHON PURO - SIN MODIFICAR TU CODIGO BASE)
+# ==============================================================================
+
+# 1. Completamos limpieza de valores nulos y demas columnas de texto (Semana 10-11)
+df_limpio = df_limpio.copy()
+df_limpio["monto_soles"] = df_limpio["monto_soles"].fillna(df_limpio["monto_soles"].median())
+df_limpio["antiguedad_cuenta_dias"] = df_limpio["antiguedad_cuenta_dias"].fillna(df_limpio["antiguedad_cuenta_dias"].median())
+for col in ["tipo_operacion", "tipo_negocio", "dispositivo_nuevo"]:
+    df_limpio[col] = df_limpio[col].str.strip().str.upper()
+
+# 2. Paso 1 EC3: Division Train / Test (80% entrenamiento = 1,600 | 20% prueba = 400)
+train = df_limpio.sample(frac=0.80, random_state=42)
+test = df_limpio.drop(train.index).copy()
+
+# 3. Paso 2 EC3: Entrenamiento del modelo de clasificacion sobre train
+def entrenar_modelo(datos_train):
+    return {
+        "umbral_monto": round(datos_train["monto_soles"].quantile(0.92), 2),
+        "umbral_antiguedad": 30,
+        "umbral_hora": 5,
+    }
+
+parametros_ia = entrenar_modelo(train)
+
+# 4. Paso 3 EC3: Prediccion de fraude (1 = Fraude, 0 = Normal)
+def predecir_fraude(fila, params):
+    senales = 0
+    if fila["antiguedad_cuenta_dias"] < params["umbral_antiguedad"]:
+        senales += 1
+    if fila["hora"] <= params["umbral_hora"]:
+        senales += 1
+    if fila["dispositivo_nuevo"] == "SÍ":
+        senales += 1
+
+    if fila["monto_soles"] > params["umbral_monto"] or senales >= 2:
+        return 1
+    return 0
+
+test["prediccion"] = test.apply(lambda f: predecir_fraude(f, parametros_ia), axis=1)
+
+# 5. Evaluacion EC3: 2 metricas (Accuracy y Recall) y Matriz de Confusion
+aciertos = (test["es_fraude"] == test["prediccion"]).sum()
+accuracy = round((aciertos / len(test)) * 100, 2)
+
+vp = ((test["es_fraude"] == 1) & (test["prediccion"] == 1)).sum()
+fraudes_reales = (test["es_fraude"] == 1).sum()
+recall = round((vp / fraudes_reales) * 100, 2)
+
+matriz_confusion = pd.crosstab(
+    test["es_fraude"], test["prediccion"],
+    rownames=["Real"], colnames=["Predicho"]
+)
+
+# 6. Etica Algoritmica (Criterio 2): Falsas alarmas por distrito en prueba
+test["falsa_alarma"] = (test["es_fraude"] == 0) & (test["prediccion"] == 1)
+legitimas = test[test["es_fraude"] == 0]
+tabla_etica = legitimas.groupby("distrito")["falsa_alarma"].agg(
+    legitimas="count",
+    falsas_alarmas="sum",
+    tasa_error="mean"
+)
+tabla_etica["tasa_error_%"] = (tabla_etica["tasa_error"] * 100).round(2)
+
+# 7. Mitigacion etica con if/elif/else (Semana 3) aplicada a toda la tabla
+df_limpio["fraude_predicho"] = df_limpio.apply(lambda f: predecir_fraude(f, parametros_ia), axis=1)
+
+def accion_etica(fila):
+    if fila["fraude_predicho"] == 1 and (fila["monto_soles"] >= 200 or fila["dispositivo_nuevo"] == "SÍ"):
+        return "BLOQUEO PREVENTIVO + LLAMADA"
+    elif fila["fraude_predicho"] == 1:
+        return "VERIFICACION SMS (OTP)"
+    else:
+        return "APROBADA"
+
+df_limpio["accion_sistema"] = df_limpio.apply(accion_etica, axis=1)
+
+# 8. Ampliamos tus diccionarios para que tu chatbot original tambien responda sobre la IA
+CLASES["accion"] = "accion_sistema"
+MEDIDA["predicho"] = ("fraude_predicho", "sum")
+NOMBRE_MEDIDA["fraude_predicho"] = "fraudes predichos por IA"
+
+# 9. Imprimimos los resultados EC3 al iniciar el programa
+print("=== RESULTADOS DEL MODELO DE CLASIFICACION (EC3) ===")
+print(f"Division: {len(train)} train (80%) | {len(test)} test (20%)")
+print(f"Accuracy: {accuracy}% ({aciertos} de {len(test)} aciertos)")
+print(f"Recall:   {recall}% ({vp} de {fraudes_reales} fraudes reales detectados)")
+print("\nMatriz de Confusion:")
+print(matriz_confusion)
+print("\nTabla de Errores por Distrito (Etica Algoritmica):")
+print(tabla_etica[["legitimas", "falsas_alarmas", "tasa_error_%"]])
+print("====================================================\n")
+
 if __name__ == "__main__":
     print("Ingrese su consulta. Escriba 'salir' para finalizar las operaciones")
     while True: 
@@ -151,8 +244,3 @@ if __name__ == "__main__":
         if entrada(pregunta) == "salir":
             break
         print(respuesta(pregunta), "\n")
-        
-
-
-
-
