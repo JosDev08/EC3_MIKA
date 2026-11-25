@@ -1,3 +1,7 @@
+# Añadir el siguiente comando en CMD para descargar las librerias
+
+# python -m pip install pandas
+
 import unicodedata
 
 # Con "Path" se puede trabar con rutas de archivos y carpetas
@@ -96,7 +100,6 @@ def respuesta(pregunta):
     nombre_calculo = NOMBRE_CALCULO[calculo]
     nombre_medida = NOMBRE_MEDIDA[col_medida]
 
-    # NUEVO: si solo pidio la medida (ej. "fraudes"), damos el valor de toda la tabla
     if columna is None:
         valor = round(df_limpio[col_medida].agg(calculo), 2)
         return f"{nombre_calculo} de {nombre_medida}: {valor}"
@@ -111,7 +114,6 @@ def respuesta(pregunta):
         .round(2)
     )
 
-# NUEVO: armamos la lista completa, una linea por cada elemento
     lista = ""
     for nombre, valor in resultado.items():
         lista += f"  {nombre}: {valor}\n"
@@ -142,24 +144,15 @@ resultado = (
 # print(f"a : {round((promedio * 100),2)} %")
 #print(resultado)
 
-### PUEDE AMPLIARSE 
-
-# ==============================================================================
-# ADICIONES EC3 (SOLO PANDAS Y PYTHON PURO - SIN MODIFICAR TU CODIGO BASE)
-# ==============================================================================
-
-# 1. Completamos limpieza de valores nulos y demas columnas de texto (Semana 10-11)
 df_limpio = df_limpio.copy()
 df_limpio["monto_soles"] = df_limpio["monto_soles"].fillna(df_limpio["monto_soles"].median())
 df_limpio["antiguedad_cuenta_dias"] = df_limpio["antiguedad_cuenta_dias"].fillna(df_limpio["antiguedad_cuenta_dias"].median())
 for col in ["tipo_operacion", "tipo_negocio", "dispositivo_nuevo"]:
     df_limpio[col] = df_limpio[col].str.strip().str.upper()
 
-# 2. Paso 1 EC3: Division Train / Test (80% entrenamiento = 1,600 | 20% prueba = 400)
 train = df_limpio.sample(frac=0.80, random_state=42)
 test = df_limpio.drop(train.index).copy()
 
-# 3. Paso 2 EC3: Entrenamiento del modelo de clasificacion sobre train
 def entrenar_modelo(datos_train):
     return {
         "umbral_monto": round(datos_train["monto_soles"].quantile(0.92), 2),
@@ -169,7 +162,6 @@ def entrenar_modelo(datos_train):
 
 parametros_ia = entrenar_modelo(train)
 
-# 4. Paso 3 EC3: Prediccion de fraude (1 = Fraude, 0 = Normal)
 def predecir_fraude(fila, params):
     senales = 0
     if fila["antiguedad_cuenta_dias"] < params["umbral_antiguedad"]:
@@ -185,7 +177,6 @@ def predecir_fraude(fila, params):
 
 test["prediccion"] = test.apply(lambda f: predecir_fraude(f, parametros_ia), axis=1)
 
-# 5. Evaluacion EC3: 2 metricas (Accuracy y Recall) y Matriz de Confusion
 aciertos = (test["es_fraude"] == test["prediccion"]).sum()
 accuracy = round((aciertos / len(test)) * 100, 2)
 
@@ -198,7 +189,6 @@ matriz_confusion = pd.crosstab(
     rownames=["Real"], colnames=["Predicho"]
 )
 
-# 6. Etica Algoritmica (Criterio 2): Falsas alarmas por distrito en prueba
 test["falsa_alarma"] = (test["es_fraude"] == 0) & (test["prediccion"] == 1)
 legitimas = test[test["es_fraude"] == 0]
 tabla_etica = legitimas.groupby("distrito")["falsa_alarma"].agg(
@@ -208,7 +198,6 @@ tabla_etica = legitimas.groupby("distrito")["falsa_alarma"].agg(
 )
 tabla_etica["tasa_error_%"] = (tabla_etica["tasa_error"] * 100).round(2)
 
-# 7. Mitigacion etica con if/elif/else (Semana 3) aplicada a toda la tabla
 df_limpio["fraude_predicho"] = df_limpio.apply(lambda f: predecir_fraude(f, parametros_ia), axis=1)
 
 def accion_etica(fila):
@@ -221,7 +210,6 @@ def accion_etica(fila):
 
 df_limpio["accion_sistema"] = df_limpio.apply(accion_etica, axis=1)
 
-# 8. Ampliamos tus diccionarios para que tu chatbot original tambien responda sobre la IA
 CLASES["accion"] = "accion_sistema"
 MEDIDA["predicho"] = ("fraude_predicho", "sum")
 NOMBRE_MEDIDA["fraude_predicho"] = "fraudes predichos por IA"
